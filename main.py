@@ -3,95 +3,79 @@ import json
 
 app = FastAPI()
 
-# Known user profiles
-USER_PROFILE = {
-    "finance@bahrainrfc.com": {
-        "name": "Johann",
-        "role": "admin"
-    },
-    "generalmanager@bahrainrfc.com": {
-        "name": "Paul",
-        "role": "admin"
-    },
-    # Example of non-admin user
-    "someoneelse@bahrainrfc.com": {
-        "name": "Jane",
-        "role": "user",
-        "department": "Marketing"
-    }
+# Track user interaction state
+user_states = {}
+
+# Known users with special department access
+special_users = {
+    "finance@bahrainrfc.com": "Johann",
+    "generalmanager@bahrainrfc.com": "Paul"
 }
 
-ALL_DEPARTMENTS = [
+# All available departments
+all_departments = [
     "Clubhouse", "Facilities", "Finance", "Front Office",
     "Human Capital", "Management", "Marketing", "Sponsorship", "Sports"
 ]
+
+# Starting words that trigger the bot
+greeting_triggers = ["hi", "hey", "howzit", "salam", "hello"]
 
 @app.post("/")
 async def chat_webhook(request: Request):
     body = await request.json()
     print("Received request:", json.dumps(body, indent=2))
 
-    sender = body.get("message", {}).get("sender", {})
-    email = sender.get("email", "")
-    name = sender.get("displayName", "there")
-    message_text = body.get("message", {}).get("text", "").lower().strip()
+    sender_info = body.get("message", {}).get("sender", {})
+    sender_name = sender_info.get("displayName", "there")
+    sender_email = sender_info.get("email", "").lower()
+    message_text = body.get("message", {}).get("text", "").strip().lower()
 
-    user = USER_PROFILE.get(email)
-
-    if not user:
-        return {"text": f"Hi {name}, I don’t recognize your account. Please contact admin."}
-
-    is_admin = user.get("role") == "admin"
-
-    if message_text in ["hi", "hello", "hey", "howzit", "salam"]:
-        if is_admin:
-            return {"text": f"Hi {user['name']},\nWhat department would you like to raise a PO for?"}
+    # If it's a new message with a greeting
+    if any(message_text.startswith(greet) for greet in greeting_triggers):
+        if sender_email in special_users:
+            user_states[sender_email] = "awaiting_department_selection"
+            return {
+                "text": f"Hi {sender_name},\nWhat department would you like to raise a PO for?\nOptions: {', '.join(all_departments)}"
+            }
         else:
-            dept = user.get("department")
-            return {"text": f"Hi {user['name']},\nAre we getting the PO details for the {dept} department?"}
+            user_states[sender_email] = "awaiting_department_confirmation"
+            return {
+                "text": f"Hi {sender_name},\nAre we getting the PO details for the Finance department?"
+            }
 
-    elif message_text in ["yes", "yes we are"]:
-        if is_admin:
-            return {"text": "Great — just let me know which department you'd like to proceed with."}
+    # Handle user confirming their department (default case)
+    if user_states.get(sender_email) == "awaiting_department_confirmation":
+        if message_text in ["yes", "correct"]:
+            user_states[sender_email] = "awaiting_cost_item_choice"
+            return {
+                "text": "Thanks for confirming.\nDo you know the cost item or would you like to choose from the list?\nOptions:\n- Yes, I know it\n- I’ll choose from list"
+            }
         else:
-            return {"text": f"Great, let’s continue with the PO request for the {user['department']} department."}
+            user_states[sender_email] = "awaiting_manual_department"
+            return {
+                "text": "To which department does this PO belong?"
+            }
 
-    elif message_text in ["no", "not finance", "no we're not"]:
-        return {"text": "To which department does this PO belong?"}
+    # Handle department selection from special users
+    if user_states.get(sender_email) == "awaiting_department_selection":
+        if message_text.title() in all_departments:
+            user_states[sender_email] = "awaiting_cost_item_choice"
+            return {
+                "text": f"Thanks for confirming the department: {message_text.title()}.\nDo you know the cost item or would you like to choose from the list?\nOptions:\n- Yes, I know it\n- I’ll choose from list"
+            }
+        else:
+            return {
+                "text": f"That department isn't recognized. Please choose from the following:\n{', '.join(all_departments)}"
+            }
 
-    # Match valid department if given
-    elif message_text.title() in ALL_DEPARTMENTS:
-        return {"text": f"Got it. Proceeding with the PO request for the {message_text.title()} department."}
+    # Handle when user is asked if they know the cost item
+    if user_states.get(sender_email) == "awaiting_cost_item_choice":
+        if message_text in ["yes", "i know it", "i'll type it"]:
+            user_states[sender_email] = "awaiting_cost_item_name"
+            return {"text": "Great, please type the cost item you'd like this PO to be allocated against."}
+        else:
+            user_states[sender_email] = "awaiting_cost_item_selection"
+            return {"text": "Sure, please choose from the cost item list:\n- Office Supplies\n- Repairs and Maintenance\n- Travel Expenses\n- Equipment Purchase\n(You can expand this later)"}
 
-    # Catch-all
-    else:
-        return {"text": f"Thanks {user['name']}, I’ve noted: '{message_text}'. Let me know if that’s the department or if you need help."}
-
-# Assume sender_email and message_text already exist in your logic
-user_state = user_states.get(sender_email)
-
-# State: Department just confirmed
-if user_state == "awaiting_cost_item_choice":
-    if message_text.lower() in ["yes", "i know it", "i'll type it", "i will type it", "yep", "sure"]:
-        user_states[sender_email] = "awaiting_cost_item_name"
-        return {"text": "Great, please type the cost item you'd like this PO to be allocated against."}
-
-    elif message_text.lower() in ["no", "not sure", "choose from list", "show me", "list"]:
-        user_states[sender_email] = "awaiting_cost_item_selection"
-        # Replace with dynamic department-specific items later
-        return {
-            "text": (
-                f"Here are the available cost items for the {confirmed_department} department:\n"
-                "- Item A\n- Item B\n- Item C\n\nPlease reply with your selection."
-            )
-        }
-
-    else:
-        return {
-            "text": "Please confirm: Do you know the cost item or would you like to choose from a list?"
-        }
-
-# After department confirmation, trigger this next state
-if user_state == "department_confirmed":
-    user_states[sender_email] = "awaiting_cost_item_choice"
-    return {"text": "Thanks for confirming.\nDo you know the cost item or would you like to choose from the list?"}
+    return {"text": "I'm not sure how to help with that just yet — please start again with 'Hi', 'Hey', 'Howzit', or 'Salam'."}
