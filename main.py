@@ -23,7 +23,7 @@ greeting_triggers = ["hi", "hello", "hey", "howzit", "salam"]
 def get_cost_items_for_department(department: str) -> list:
     creds = Credentials.from_service_account_file(
         SERVICE_ACCOUNT_FILE,
-        scopes=["https://www.googleapis.com/auth/spreadsheets.readonly"]
+        scopes=["https://www.googleapis.com/auth/spreadsheets"]
     )
     gc = gspread.authorize(creds)
     sheet = gc.open(SPREADSHEET_NAME).worksheet(SHEET_TAB_NAME)
