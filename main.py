@@ -23,13 +23,26 @@ greeting_triggers = ["hi", "hello", "hey", "howzit", "salam"]
 def get_cost_items_for_department(department: str) -> list:
     creds = Credentials.from_service_account_file(
         SERVICE_ACCOUNT_FILE,
-        scopes = ["https://www.googleapis.com/auth/drive.readonly", "https://www.googleapis.com/auth/spreadsheets"]
+        scopes=["https://www.googleapis.com/auth/spreadsheets.readonly"]
     )
     gc = gspread.authorize(creds)
-    sheet = gc.open_by_key("1U19XSieDNaDGN0khJJ8vFaDG75DwdKjE53d6MWi0Nt8").worksheet(SHEET_TAB_NAME)
-    rows = sheet.get_all_values()[90:]  # Starting at row 91
+    sheet = gc.open(SPREADSHEET_NAME).worksheet(SHEET_TAB_NAME)
+    rows = sheet.get_all_values()[90:]
     cost_items = [row[3] for row in rows if len(row) > 3 and row[1].strip().lower() == department.lower()]
-    return list(set(filter(None, cost_items)))  # Unique, non-empty
+    return list(set(filter(None, cost_items)))
+
+def get_budget_for_cost_item(department: str, item: str) -> str:
+    creds = Credentials.from_service_account_file(
+        SERVICE_ACCOUNT_FILE,
+        scopes=["https://www.googleapis.com/auth/spreadsheets.readonly"]
+    )
+    gc = gspread.authorize(creds)
+    sheet = gc.open(SPREADSHEET_NAME).worksheet(SHEET_TAB_NAME)
+    rows = sheet.get_all_values()[90:]
+    for row in rows:
+        if len(row) > 17 and row[1].strip().lower() == department.lower() and row[3].strip().lower() == item.lower():
+            return row[17]  # Column R = index 17
+    return "not found"
 
 @app.post("/")
 async def chat_webhook(request: Request):
@@ -37,25 +50,24 @@ async def chat_webhook(request: Request):
     print("Received request:", json.dumps(body, indent=2))
 
     sender = body.get("message", {}).get("sender", {})
-    sender_name = sender.get("displayName", "there")
+    full_name = sender.get("displayName", "there")
+    sender_first_name = full_name.split()[0]
     sender_email = sender.get("email", "").lower()
     message_text = body.get("message", {}).get("text", "").strip().lower()
     user_state = user_states.get(sender_email)
 
-    # Greet and ask for department
     if any(message_text.startswith(greet) for greet in greeting_triggers):
         if sender_email in special_users:
             user_states[sender_email] = "awaiting_department_selection"
             return {
-                "text": f"Hi {sender_name},\nWhat department would you like to raise a PO for?\nOptions: {', '.join(all_departments)}"
+                "text": f"Hi {sender_first_name},\nWhat department would you like to raise a PO for?\nOptions: {', '.join(all_departments)}"
             }
         else:
             user_states[sender_email] = "awaiting_department_confirmation"
             return {
-                "text": f"Hi {sender_name},\nAre we getting the PO details for the Finance department?"
+                "text": f"Hi {sender_first_name},\nAre we getting the PO details for the Finance department?"
             }
 
-    # Normal users confirming default department
     if user_state == "awaiting_department_confirmation":
         if message_text in ["yes", "correct"]:
             user_states[sender_email] = "awaiting_cost_item_choice"
@@ -67,7 +79,6 @@ async def chat_webhook(request: Request):
             user_states[sender_email] = "awaiting_manual_department"
             return {"text": "To which department does this PO belong?"}
 
-    # Special users picking a department
     if user_state == "awaiting_department_selection":
         if message_text.title() in all_departments:
             user_states[sender_email] = "awaiting_cost_item_choice"
@@ -78,7 +89,6 @@ async def chat_webhook(request: Request):
         else:
             return {"text": f"That department isn't recognized. Please choose from:\n{', '.join(all_departments)}"}
 
-    # Manual department input (fallback)
     if user_state == "awaiting_manual_department":
         if message_text.title() in all_departments:
             user_states[sender_email] = "awaiting_cost_item_choice"
@@ -89,7 +99,6 @@ async def chat_webhook(request: Request):
         else:
             return {"text": f"Please reply with a valid department name.\nOptions: {', '.join(all_departments)}"}
 
-    # Ask cost item method
     if user_state == "awaiting_cost_item_choice":
         if message_text in ["yes", "i know it", "i'll type it"]:
             user_states[sender_email] = "awaiting_cost_item_name"
@@ -99,6 +108,16 @@ async def chat_webhook(request: Request):
             cost_items = get_cost_items_for_department(department)
             reply = f"Here are the available cost items for {department}:\n- " + "\n- ".join(cost_items[:10])
             return {"text": reply}
+
+    if user_state == "awaiting_cost_item_name":
+        department = user_states.get(f"{sender_email}_department", "Finance")
+        cost_item = message_text.strip()
+        user_states[f"{sender_email}_cost_item"] = cost_item
+        budget = get_budget_for_cost_item(department, cost_item)
+        user_states[sender_email] = "awaiting_quote"
+        return {
+            "text": f"The total budgeted amount for '{cost_item}' under {department} is: {budget}.\nPlease upload or paste the quote details to continue."
+        }
 
     return {
         "text": "I'm not sure how to help with that. Start again with 'Hi' or choose a department."
