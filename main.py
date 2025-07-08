@@ -26,7 +26,7 @@ def get_cost_items_for_department(department: str) -> list:
         scopes = ["https://www.googleapis.com/auth/drive.readonly", "https://www.googleapis.com/auth/spreadsheets"]
     )
     gc = gspread.authorize(creds)
-    sheet = gc.open_by_key("https://docs.google.com/spreadsheets/d/1U19XSieDNaDGN0khJJ8vFaDG75DwdKjE53d6MWi0Nt8/edit?usp=sharing").worksheet(SHEET_TAB_NAME)
+    sheet = gc.open_by_key("1U19XSieDNaDGN0khJJ8vFaDG75DwdKjE53d6MWi0Nt8").worksheet(SHEET_TAB_NAME)
     rows = sheet.get_all_values()[90:]  # Starting at row 91
     cost_items = [row[3] for row in rows if len(row) > 3 and row[1].strip().lower() == department.lower()]
     return list(set(filter(None, cost_items)))  # Unique, non-empty
