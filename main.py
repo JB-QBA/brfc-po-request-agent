@@ -43,7 +43,7 @@ async def chat_webhook(request: Request):
 
     is_admin = user.get("role") == "admin"
 
-    if message_text in ["hi", "hello"]:
+    if message_text in ["hi", "hello", "hey", "howzit", "salam"]:
         if is_admin:
             return {"text": f"Hi {user['name']},\nWhat department would you like to raise a PO for?"}
         else:
