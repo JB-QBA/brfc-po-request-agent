@@ -66,3 +66,32 @@ async def chat_webhook(request: Request):
     # Catch-all
     else:
         return {"text": f"Thanks {user['name']}, I’ve noted: '{message_text}'. Let me know if that’s the department or if you need help."}
+
+# Assume sender_email and message_text already exist in your logic
+user_state = user_states.get(sender_email)
+
+# State: Department just confirmed
+if user_state == "awaiting_cost_item_choice":
+    if message_text.lower() in ["yes", "i know it", "i'll type it", "i will type it", "yep", "sure"]:
+        user_states[sender_email] = "awaiting_cost_item_name"
+        return {"text": "Great, please type the cost item you'd like this PO to be allocated against."}
+
+    elif message_text.lower() in ["no", "not sure", "choose from list", "show me", "list"]:
+        user_states[sender_email] = "awaiting_cost_item_selection"
+        # Replace with dynamic department-specific items later
+        return {
+            "text": (
+                f"Here are the available cost items for the {confirmed_department} department:\n"
+                "- Item A\n- Item B\n- Item C\n\nPlease reply with your selection."
+            )
+        }
+
+    else:
+        return {
+            "text": "Please confirm: Do you know the cost item or would you like to choose from a list?"
+        }
+
+# After department confirmation, trigger this next state
+if user_state == "department_confirmed":
+    user_states[sender_email] = "awaiting_cost_item_choice"
+    return {"text": "Thanks for confirming.\nDo you know the cost item or would you like to choose from the list?"}
