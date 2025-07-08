@@ -31,13 +31,31 @@ def get_cost_items_for_department(department: str) -> list:
     cost_items = [row[3] for row in rows if len(row) > 3 and row[1].strip().lower() == department.lower()]
     return list(set(filter(None, cost_items)))  # Unique, non-empty
 
+def get_budget_total_for_cost_item(department: str, cost_item: str) -> str:
+    creds = Credentials.from_service_account_file(
+        SERVICE_ACCOUNT_FILE,
+        scopes=["https://www.googleapis.com/auth/drive.readonly", "https://www.googleapis.com/auth/spreadsheets"]
+    )
+    gc = gspread.authorize(creds)
+    sheet = gc.open_by_key("1U19XSieDNaDGN0khJJ8vFaDG75DwdKjE53d6MWi0Nt8").worksheet(SHEET_TAB_NAME)
+    rows = sheet.get_all_values()[90:]  # Starting at row 91
+
+    for row in rows:
+        if len(row) >= 18:
+            row_department = row[1].strip().lower()
+            row_item = row[3].strip().lower()
+            if row_department == department.lower() and row_item == cost_item.lower():
+                return row[17]  # Column R (index 17) is the total
+
+    return "0"
+
 @app.post("/")
 async def chat_webhook(request: Request):
     body = await request.json()
     print("Received request:", json.dumps(body, indent=2))
 
     sender = body.get("message", {}).get("sender", {})
-    sender_name = sender.get("displayName", "there").split()[0]  # Only first name
+    sender_name = sender.get("displayName", "there").split()[0]
     sender_email = sender.get("email", "").lower()
     message_text = body.get("message", {}).get("text", "").strip().lower()
     user_state = user_states.get(sender_email)
@@ -84,7 +102,7 @@ async def chat_webhook(request: Request):
             user_states[sender_email] = "awaiting_cost_item_choice"
             user_states[f"{sender_email}_department"] = message_text.title()
             return {
-                "text": f"Got it. Working with the {message_text.title()} department.\nDo you know the cost item or would you like to choose from the list?\nOptions:\n- Yes, I know it\n- I’ll choose from list"
+                "text": f"Got it. Working with the {message_text.title()} department.\nDo you know the cost item or would you like to choose from the list?"
             }
         else:
             return {"text": f"Please reply with a valid department name.\nOptions: {', '.join(all_departments)}"}
@@ -98,25 +116,21 @@ async def chat_webhook(request: Request):
             department = user_states.get(f"{sender_email}_department", "Finance")
             cost_items = get_cost_items_for_department(department)
             user_states[sender_email] = "awaiting_cost_item_name_from_list"
-            reply = f"Here are the available cost items for {department}:\n- " + "\n- ".join(cost_items[:10])
-            return {"text": reply + "\n\nPlease type the exact cost item from this list."}
+            user_states[f"{sender_email}_cost_items"] = cost_items
+            return {"text": f"Here are the available cost items for {department}:\n- " + "\n- ".join(cost_items[:10])}
 
-    # User types cost item from list
+    # User selects from list
     if user_state == "awaiting_cost_item_name_from_list":
         department = user_states.get(f"{sender_email}_department", "Finance")
-        cost_items = get_cost_items_for_department(department)
-        matched_item = next((item for item in cost_items if item.strip().lower() == message_text.strip().lower()), None)
-
+        cost_items = user_states.get(f"{sender_email}_cost_items", [])
+        matched_item = next((item for item in cost_items if item.lower() == message_text), None)
         if matched_item:
-            user_states[sender_email] = "awaiting_quote_upload"
-            user_states[f"{sender_email}_cost_item"] = matched_item
+            budget_total = get_budget_total_for_cost_item(department, matched_item)
             return {
-                "text": f"You selected: {matched_item}.\nThe budgeted total for this item will be retrieved shortly.\nPlease upload the quote for this request."
+                "text": f"You selected: {matched_item}.\nThe total budget allocated for this item is: BHD {budget_total}.\nPlease upload the quote for this request."
             }
         else:
-            return {
-                "text": f"'{message_text}' doesn't match any known cost items for {department}.\nPlease pick from the list or retype your selection."
-            }
+            return {"text": "That item wasn't found. Please try typing it exactly as shown or start again with 'Hi'."}
 
     return {
         "text": "I'm not sure how to help with that. Start again with 'Hi' or choose a department."
