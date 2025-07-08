@@ -7,7 +7,7 @@ app = FastAPI()
 user_states = {}
 
 # Hardcoded config
-SERVICE_ACCOUNT_FILE = "/etc/secrets/service_account.json"
+SERVICE_ACCOUNT_FILE = "/etc/secrets/winged-pen-413708-e9544129b499.json"
 SPREADSHEET_NAME = "FY2025 Budget for Analysis"
 SHEET_TAB_NAME = "FY2025Budget"
 special_users = {
