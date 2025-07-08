@@ -23,10 +23,10 @@ greeting_triggers = ["hi", "hello", "hey", "howzit", "salam"]
 def get_cost_items_for_department(department: str) -> list:
     creds = Credentials.from_service_account_file(
         SERVICE_ACCOUNT_FILE,
-        scopes=["https://www.googleapis.com/auth/spreadsheets.readonly"]
+        scopes = ["https://www.googleapis.com/auth/drive.readonly", "https://www.googleapis.com/auth/spreadsheets"]
     )
     gc = gspread.authorize(creds)
-    sheet = gc.open(SPREADSHEET_NAME).worksheet(SHEET_TAB_NAME)
+    sheet = gc.open_by_key("1U19XSieDNaDGN0khJJ8vFaDG75DwdKjE53d6MWi0Nt8").worksheet(SHEET_TAB_NAME)
     rows = sheet.get_all_values()[90:]
     cost_items = [row[3] for row in rows if len(row) > 3 and row[1].strip().lower() == department.lower()]
     return list(set(filter(None, cost_items)))
@@ -37,7 +37,7 @@ def get_budget_for_cost_item(department: str, item: str) -> str:
         scopes=["https://www.googleapis.com/auth/spreadsheets.readonly"]
     )
     gc = gspread.authorize(creds)
-    sheet = gc.open(SPREADSHEET_NAME).worksheet(SHEET_TAB_NAME)
+    sheet = gc.open_by_key("YOUR_SPREADSHEET_ID").worksheet(SHEET_TAB_NAME)
     rows = sheet.get_all_values()[90:]
     for row in rows:
         if len(row) > 17 and row[1].strip().lower() == department.lower() and row[3].strip().lower() == item.lower():
