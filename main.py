@@ -146,9 +146,8 @@ async def chat_webhook(request: Request):
         department = user_states.get(f"{sender_email}_department")
         reference = user_states.get(f"{sender_email}_reference")
         attachment = body["message"]["attachment"][0]
-        attachment_url = attachment.get("driveDataRef", {}).get("driveFileId", "Unknown File")
-
-        file_link = f"https://drive.google.com/file/d/{attachment_url}/view" if attachment_url != "Unknown File" else "File not available"
+   file_name = attachment.get("name", "Unnamed file")
+   file_url = attachment.get("downloadUri", "File not available")
 
         summary_text = (
             f"📩 *New PO Request Received!*\n"
@@ -156,7 +155,7 @@ async def chat_webhook(request: Request):
             f"*Account:* {account}\n"
             f"*Department:* {department}\n"
             f"*Projects/Events/Budgets:* {reference}\n"
-            f"*Quote File:* {file_link}\n\n"
+            f"*Quote File:* [{file_name}]({file_url})\n\n"
             f"Please make sure that the approved PO is sent to {first_name}."
         )
 
