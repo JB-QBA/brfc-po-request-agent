@@ -141,31 +141,36 @@ async def chat_webhook(request: Request):
 
     # Handle file upload
     if "attachment" in body.get("message", {}):
-        cost_item = user_states.get(f"{sender_email}_cost_item")
-        account = user_states.get(f"{sender_email}_account")
-        department = user_states.get(f"{sender_email}_department")
-        reference = user_states.get(f"{sender_email}_reference")
+    cost_item = user_states.get(f"{sender_email}_cost_item")
+    account = user_states.get(f"{sender_email}_account")
+    department = user_states.get(f"{sender_email}_department")
+    reference = user_states.get(f"{sender_email}_reference")
 
-        summary_text = (
-            f"📩 *New PO Request Received!*\n"
-            f"*Cost Item:* {cost_item}\n"
-            f"*Account:* {account}\n"
-            f"*Department:* {department}\n"
-            f"*Projects/Events/Budgets:* {reference}\n"
-            f"\nPlease make sure that the approved PO is sent to {first_name}."
+    attachment = body["message"]["attachment"][0]
+    file_name = attachment.get("name")
+    file_url = attachment.get("downloadUri")
+
+    summary_text = (
+        f"📩 *New PO Request Received!*\n"
+        f"*Cost Item:* {cost_item}\n"
+        f"*Account:* {account}\n"
+        f"*Department:* {department}\n"
+        f"*Projects/Events/Budgets:* {reference}\n\n"
+        f"📎 *Attached Quote:* [{file_name}]({file_url})\n\n"
+        f"Please make sure that the approved PO is sent to {first_name}."
+    )
+
+    post_to_shared_space(summary_text)
+    user_states[sender_email] = "awaiting_q1"
+
+    return {
+        "text": (
+            "✅ Quote received successfully!\n"
+            "I've shared the PO request details with the Procurement team.\n\n"
+            "Now just a couple of final questions:\n"
+            "1️⃣ Does this quote require any upfront payments?"
         )
-
-        post_to_shared_space(summary_text)
-        user_states[sender_email] = "awaiting_q1"
-
-        return {
-            "text": (
-                "✅ Quote received successfully!\n"
-                "I've shared the PO request details with the Procurement team.\n\n"
-                "Now just a couple of final questions:\n"
-                "1️⃣ Does this quote require any upfront payments?"
-            )
-        }
+    }
 
     # Handle Q1
     if user_state == "awaiting_q1":
