@@ -154,7 +154,7 @@ async def chat_webhook(request: Request):
             return {
                 "text": (
                     f"✅ Great, you've selected: {message_text.title()} under {department}\n\n"
-                    f"📊 Budgeted for item: {int(float(cost_item_total)):,}\n"
+                    f"📊 Budgeted for item: {int(float(cost_item_total.replace(',', ''))):,}\n"
                     f"📊 Budgeted total for account '{account}': {int(account_total):,}\n"
                     f"📊 YTD actuals for '{account}': {int(ytd_actuals):,}\n\n"
                     "You can now upload the quote here to continue – just a few more questions and we're done."
