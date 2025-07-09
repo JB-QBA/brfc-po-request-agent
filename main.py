@@ -145,9 +145,10 @@ async def chat_webhook(request: Request):
         account = user_states.get(f"{sender_email}_account")
         department = user_states.get(f"{sender_email}_department")
         reference = user_states.get(f"{sender_email}_reference")
+
         attachment = body["message"]["attachment"][0]
-   file_name = attachment.get("name", "Unnamed file")
-   file_url = attachment.get("downloadUri", "File not available")
+        file_name = attachment.get("name", "Unnamed file")
+        file_url = attachment.get("downloadUri", "File not available")
 
         summary_text = (
             f"📩 *New PO Request Received!*\n"
