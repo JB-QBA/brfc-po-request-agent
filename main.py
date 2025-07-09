@@ -34,48 +34,61 @@ def get_gsheet():
     gc = gspread.authorize(creds)
     return gc
 
-# GET COST ITEMS BY DEPARTMENT
+# COST ITEM LIST
 def get_cost_items_for_department(department: str) -> list:
     sheet = get_gsheet().open_by_key("1U19XSieDNaDGN0khJJ8vFaDG75DwdKjE53d6MWi0Nt8").worksheet(SHEET_TAB_NAME)
     rows = sheet.get_all_values()[1:]  # From row 2
-    return list(set(row[3] for row in rows if len(row) > 3 and row[1].strip().lower() == department.lower()))
+    return list(set(
+        row[3] for row in rows
+        if len(row) > 3 and row[1].strip().lower() == department.strip().lower()
+    ))
 
-# GET ACCOUNT & TRACKING FOR A COST ITEM
+# COST ITEM ➝ ACCOUNT/TRACKING/BUDGET
 def get_account_and_tracking(cost_item: str, department: str):
     sheet = get_gsheet().open_by_key("1U19XSieDNaDGN0khJJ8vFaDG75DwdKjE53d6MWi0Nt8").worksheet(SHEET_TAB_NAME)
     rows = sheet.get_all_values()[1:]
     for row in rows:
-        if len(row) >= 5 and row[3].strip().lower() == cost_item.lower() and row[1].strip().lower() == department.lower():
-            account = row[0]
-            tracking = row[4]
+        if len(row) >= 5 and row[3].strip().lower() == cost_item.strip().lower() and row[1].strip().lower() == department.strip().lower():
+            account = row[0].strip()
+            tracking = row[4].strip()
             total_budget = row[17] if len(row) > 17 else "0"
             return account, tracking, total_budget
     return None, None, "0"
 
-# GET BUDGET TOTAL FOR ACCOUNT IN DEPARTMENT
+# ACCOUNT ➝ TOTAL BUDGET
 def get_total_budget_for_account(account: str, department: str):
     sheet = get_gsheet().open_by_key("1U19XSieDNaDGN0khJJ8vFaDG75DwdKjE53d6MWi0Nt8").worksheet(SHEET_TAB_NAME)
     rows = sheet.get_all_values()[1:]
     total = 0.0
     for row in rows:
-        if len(row) >= 18 and row[0].strip().lower() == account.lower() and row[1].strip().lower() == department.lower():
-            try:
-                total += float(row[17])
-            except:
-                pass
+        if len(row) >= 18:
+            acc = row[0].strip().lower()
+            dept = row[1].strip().lower()
+            val = row[17].replace(",", "").strip()
+            if acc == account.strip().lower() and dept == department.strip().lower():
+                try:
+                    if val and val.replace(".", "").replace("-", "").isdigit():
+                        total += float(val)
+                except:
+                    pass
     return total
 
-# GET XERO YTD ACTUALS
+# ACCOUNT ➝ YTD ACTUALS FROM XERO
 def get_actuals_for_account(account: str, department: str):
     sheet = get_gsheet().open_by_key("1U19XSieDNaDGN0khJJ8vFaDG75DwdKjE53d6MWi0Nt8").worksheet(XERO_TAB_NAME)
     rows = sheet.get_all_values()[3:]  # Start from row 4
     total = 0.0
     for row in rows:
-        if len(row) >= 15 and row[1].strip().lower() == account.lower() and row[14].strip().lower() == department.lower():
-            try:
-                total += float(row[10])
-            except:
-                pass
+        if len(row) >= 15:
+            acc = row[1].strip().lower()
+            dept = row[14].strip().lower()
+            val = row[10].replace(",", "").strip()
+            if acc == account.strip().lower() and dept == department.strip().lower():
+                try:
+                    if val and val.replace(".", "").replace("-", "").isdigit():
+                        total += float(val)
+                except:
+                    pass
     return total
 
 # MAIN CHATBOT HANDLER
@@ -130,10 +143,10 @@ async def chat_webhook(request: Request):
             user_states[f"{sender_email}_cost_item"] = message_text.title()
             return {
                 "text": (
-                    f"Great, you've selected: {message_text.title()} under {department}\n\n"
-                    f"• Budgeted for item: {cost_item_total}\n"
-                    f"• Budgeted total for account '{account}': {account_total}\n"
-                    f"• YTD actuals for '{account}': {ytd_actuals}\n\n"
+                    f"✅ Great, you've selected: {message_text.title()} under {department}\n\n"
+                    f"📊 Budgeted for item: {cost_item_total}\n"
+                    f"📊 Budgeted total for account '{account}': {account_total}\n"
+                    f"📊 YTD actuals for '{account}': {ytd_actuals}\n\n"
                     "Please upload the quote here to continue."
                 )
             }
