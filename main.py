@@ -85,7 +85,7 @@ async def chat_webhook(request: Request):
             user_states[sender_email] = "awaiting_cost_item_selection"
             user_states[f"{sender_email}_department"] = default_dept
             cost_items = get_cost_items_for_department(default_dept)
-            reply = f"Hi {sender_name}, here are the available cost items for {default_dept}:\n- " + "\n- ".join(cost_items[:10])
+            reply = f"Hi {sender_name}, here are the available cost items for {default_dept}:\n- " + "\n- ".join(cost_items)
             return {"text": reply}
 
     # Special users choosing department
@@ -94,7 +94,7 @@ async def chat_webhook(request: Request):
             user_states[sender_email] = "awaiting_cost_item_selection"
             user_states[f"{sender_email}_department"] = message_text.title()
             cost_items = get_cost_items_for_department(message_text.title())
-            reply = f"Thanks! Here are the cost items for {message_text.title()}:\n- " + "\n- ".join(cost_items[:10])
+            reply = f"Thanks! Here are the cost items for {message_text.title()}:\n- " + "\n- ".join(cost_items)
             return {"text": reply}
         else:
             return {"text": f"That department isn't recognized. Choose from:\n{', '.join(all_departments)}"}
@@ -112,7 +112,7 @@ async def chat_webhook(request: Request):
             }
         else:
             return {
-                "text": f"Sorry, that doesn’t match any cost items in {department}.\nTry again or pick from:\n- " + "\n- ".join(cost_items[:10])
+                "text": f"Sorry, that doesn’t match any cost items in {department}.\nTry again or pick from:\n- " + "\n- ".join(cost_items)
             }
 
     # Fallback
