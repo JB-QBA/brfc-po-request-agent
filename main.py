@@ -131,11 +131,12 @@ async def chat_webhook(request: Request):
         reference = user_states.get(f"{sender_email}_reference")
 
         summary_text = (
-            f"📩 *New PO Request Received!*
-\n*Cost Item:* {cost_item}
-\n*Account:* {account}
-\n*Department:* {department}
-\n*Projects/Events/Budgets:* {reference}")
+    f"📩 *New PO Request Received!*\n"
+    f"*Cost Item:* {cost_item}\n"
+    f"*Account:* {account}\n"
+    f"*Department:* {department}\n"
+    f"*Projects/Events/Budgets:* {reference}"
+)
 
         post_to_shared_space(summary_text)
 
