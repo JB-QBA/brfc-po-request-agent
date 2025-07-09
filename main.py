@@ -100,7 +100,7 @@ def get_finance_reference(cost_item: str, department: str):
 
 # EMAIL (simulated)
 def send_email(recipient, subject, body):
-    print(f"\n--- Sending email to {recipient} ---\")
+    print(f"\n--- Sending email to {recipient} ---")
     print(f"Subject: {subject}")
     print(f"{body}\n")
 
