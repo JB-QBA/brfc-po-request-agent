@@ -34,61 +34,53 @@ def get_gsheet():
     gc = gspread.authorize(creds)
     return gc
 
-# COST ITEM LIST
+# GET COST ITEMS BY DEPARTMENT
 def get_cost_items_for_department(department: str) -> list:
     sheet = get_gsheet().open_by_key("1U19XSieDNaDGN0khJJ8vFaDG75DwdKjE53d6MWi0Nt8").worksheet(SHEET_TAB_NAME)
     rows = sheet.get_all_values()[1:]  # From row 2
-    return list(set(
-        row[3] for row in rows
-        if len(row) > 3 and row[1].strip().lower() == department.strip().lower()
-    ))
+    return list(set(row[3] for row in rows if len(row) > 3 and row[1].strip().lower() == department.lower()))
 
-# COST ITEM ➝ ACCOUNT/TRACKING/BUDGET
+# GET ACCOUNT & TRACKING FOR A COST ITEM
 def get_account_and_tracking(cost_item: str, department: str):
     sheet = get_gsheet().open_by_key("1U19XSieDNaDGN0khJJ8vFaDG75DwdKjE53d6MWi0Nt8").worksheet(SHEET_TAB_NAME)
     rows = sheet.get_all_values()[1:]
     for row in rows:
-        if len(row) >= 5 and row[3].strip().lower() == cost_item.strip().lower() and row[1].strip().lower() == department.strip().lower():
-            account = row[0].strip()
-            tracking = row[4].strip()
+        if len(row) >= 5 and row[3].strip().lower() == cost_item.lower() and row[1].strip().lower() == department.lower():
+            account = row[0]
+            tracking = row[4]
             total_budget = row[17] if len(row) > 17 else "0"
             return account, tracking, total_budget
     return None, None, "0"
 
-# ACCOUNT ➝ TOTAL BUDGET
+# GET TOTAL BUDGET FOR AN ACCOUNT (account-level sum across department)
 def get_total_budget_for_account(account: str, department: str):
     sheet = get_gsheet().open_by_key("1U19XSieDNaDGN0khJJ8vFaDG75DwdKjE53d6MWi0Nt8").worksheet(SHEET_TAB_NAME)
-    rows = sheet.get_all_values()[1:]
+    rows = sheet.get_all_values()[1:]  # Skip header
     total = 0.0
     for row in rows:
         if len(row) >= 18:
-            acc = row[0].strip().lower()
-            dept = row[1].strip().lower()
-            val = row[17].replace(",", "").strip()
-            if acc == account.strip().lower() and dept == department.strip().lower():
+            acc_name = row[0].strip().lower()
+            dept_name = row[1].strip().lower()
+            if acc_name == account.strip().lower() and dept_name == department.strip().lower():
+                value = row[17].strip().replace(",", "").replace("−", "-").replace("–", "-").replace("—", "-")
                 try:
-                    if val and val.replace(".", "").replace("-", "").isdigit():
-                        total += float(val)
-                except:
-                    pass
+                    total += float(value)
+                except ValueError:
+                    continue
     return total
 
-# ACCOUNT ➝ YTD ACTUALS FROM XERO
+# GET YTD ACTUALS FROM XERO SHEET
 def get_actuals_for_account(account: str, department: str):
     sheet = get_gsheet().open_by_key("1U19XSieDNaDGN0khJJ8vFaDG75DwdKjE53d6MWi0Nt8").worksheet(XERO_TAB_NAME)
     rows = sheet.get_all_values()[3:]  # Start from row 4
     total = 0.0
     for row in rows:
-        if len(row) >= 15:
-            acc = row[1].strip().lower()
-            dept = row[14].strip().lower()
-            val = row[10].replace(",", "").strip()
-            if acc == account.strip().lower() and dept == department.strip().lower():
-                try:
-                    if val and val.replace(".", "").replace("-", "").isdigit():
-                        total += float(val)
-                except:
-                    pass
+        if len(row) >= 15 and row[1].strip().lower() == account.lower() and row[14].strip().lower() == department.lower():
+            value = row[10].strip().replace(",", "").replace("−", "-").replace("–", "-").replace("—", "-")
+            try:
+                total += float(value)
+            except ValueError:
+                continue
     return total
 
 # MAIN CHATBOT HANDLER
@@ -143,17 +135,17 @@ async def chat_webhook(request: Request):
             user_states[f"{sender_email}_cost_item"] = message_text.title()
             return {
                 "text": (
-                    f"✅ Great, you've selected: {message_text.title()} under {department}\n\n"
-                    f"📊 Budgeted for item: {cost_item_total}\n"
-                    f"📊 Budgeted total for account '{account}': {account_total}\n"
-                    f"📊 YTD actuals for '{account}': {ytd_actuals}\n\n"
+                    f"Great, you've selected: {message_text.title()} under {department}\n\n"
+                    f"• Budgeted for item: {cost_item_total}\n"
+                    f"• Budgeted total for account '{account}': {account_total}\n"
+                    f"• YTD actuals for '{account}': {ytd_actuals}\n\n"
                     "Please upload the quote here to continue."
                 )
             }
         else:
             return {"text": f"That cost item wasn't recognized for {department}. Try again."}
 
-    # DEFAULT RESPONSE
+    # DEFAULT
     return {
         "text": "I'm not sure how to help with that. Start with 'Hi' or type a cost item."
     }
