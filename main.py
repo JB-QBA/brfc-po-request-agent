@@ -46,42 +46,38 @@ def get_account_and_tracking(cost_item: str, department: str):
     rows = sheet.get_all_values()[1:]
     for row in rows:
         if len(row) >= 5 and row[3].strip().lower() == cost_item.lower() and row[1].strip().lower() == department.lower():
-            account = row[0]
-            tracking = row[4]
-            total_budget = row[17] if len(row) > 17 else "0"
+            account = row[0].strip()
+            tracking = row[4].strip()
+            total_budget = row[17].strip().replace(",", "") if len(row) > 17 else "0"
             return account, tracking, total_budget
     return None, None, "0"
 
-# GET TOTAL BUDGET FOR AN ACCOUNT (account-level sum across department)
+# GET BUDGET TOTAL FOR ACCOUNT IN DEPARTMENT
 def get_total_budget_for_account(account: str, department: str):
     sheet = get_gsheet().open_by_key("1U19XSieDNaDGN0khJJ8vFaDG75DwdKjE53d6MWi0Nt8").worksheet(SHEET_TAB_NAME)
     rows = sheet.get_all_values()[1:]
     total = 0.0
     for row in rows:
-        if len(row) >= 18:
-            acc = row[0].strip().lower()
-            dept = row[1].strip().lower()
-            val = row[17].strip()
-            if acc == account.strip().lower() and dept == department.strip().lower():
-                try:
-                    clean_val = val.replace(",", "").replace(" ", "").replace("-", "0")
-                    total += float(clean_val)
-                except ValueError:
-                    continue
+        if len(row) >= 18 and row[0].strip().lower() == account.strip().lower() and row[1].strip().lower() == department.lower():
+            try:
+                value = float(row[17].strip().replace(",", ""))
+                total += value
+            except:
+                pass
     return total
 
-# GET YTD ACTUALS FROM XERO SHEET
+# GET XERO YTD ACTUALS
 def get_actuals_for_account(account: str, department: str):
     sheet = get_gsheet().open_by_key("1U19XSieDNaDGN0khJJ8vFaDG75DwdKjE53d6MWi0Nt8").worksheet(XERO_TAB_NAME)
     rows = sheet.get_all_values()[3:]  # Start from row 4
     total = 0.0
     for row in rows:
-        if len(row) >= 15 and row[1].strip().lower() == account.lower() and row[14].strip().lower() == department.lower():
-            value = row[10].strip().replace(",", "").replace("−", "-").replace("–", "-").replace("—", "-")
+        if len(row) >= 15 and row[1].strip().lower() == account.strip().lower() and row[14].strip().lower() == department.lower():
             try:
-                total += float(value)
-            except ValueError:
-                continue
+                value = float(row[10].strip().replace(",", "").replace("−", "-"))  # Handle dash-like minus
+                total += value
+            except:
+                pass
     return total
 
 # MAIN CHATBOT HANDLER
@@ -146,7 +142,6 @@ async def chat_webhook(request: Request):
         else:
             return {"text": f"That cost item wasn't recognized for {department}. Try again."}
 
-    # DEFAULT
     return {
         "text": "I'm not sure how to help with that. Start with 'Hi' or type a cost item."
     }
