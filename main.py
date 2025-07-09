@@ -119,7 +119,7 @@ async def chat_webhook(request: Request):
             return {
     "text": (
         f"Hi {first_name},\nHere are the available cost items for Finance:\n"
-        + "\n".join(f"- {item}" for item in items)
+        + "\n".join(f" {item}" for item in items)
     )
 }
         else:
@@ -140,7 +140,7 @@ async def chat_webhook(request: Request):
             return {
     "text": (
         f"Thanks {first_name}. Here are the cost items for {message_text.title()}:\n"
-        + "\n".join(f"- {item}" for item in items)
+        + "\n".join(f" {item}" for item in items)
     )
 }
         else:
