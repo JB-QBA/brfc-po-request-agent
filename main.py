@@ -146,18 +146,13 @@ async def chat_webhook(request: Request):
     department = user_states.get(f"{sender_email}_department")
     reference = user_states.get(f"{sender_email}_reference")
 
-    attachment = body["message"]["attachment"][0]
-    file_name = attachment.get("name")
-    file_url = attachment.get("downloadUri")
-
     summary_text = (
         f"📩 *New PO Request Received!*\n"
         f"*Cost Item:* {cost_item}\n"
         f"*Account:* {account}\n"
         f"*Department:* {department}\n"
-        f"*Projects/Events/Budgets:* {reference}\n\n"
-        f"📎 *Attached Quote:* [{file_name}]({file_url})\n\n"
-        f"Please make sure that the approved PO is sent to {first_name}."
+        f"*Projects/Events/Budgets:* {reference}\n"
+        f"\nPlease make sure that the approved PO is sent to {first_name}."
     )
 
     post_to_shared_space(summary_text)
