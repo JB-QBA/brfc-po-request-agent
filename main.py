@@ -19,7 +19,7 @@ special_users = {
     "generalmanager@bahrainrfc.com": "Paul"
 }
 
-dept_users = {
+department_managers = {
     "hr@bahrainrfc.com": "Human Capital",
     "facilities@bahrainrfc.com": "Facilities",
     "clubhouse@bahrainrfc.com": "Clubhouse",
@@ -36,7 +36,6 @@ all_departments = [
 greeting_triggers = ["hi", "hello", "hey", "howzit", "salam"]
 
 # GOOGLE AUTH
-
 def get_gsheet():
     scopes = [
         "https://www.googleapis.com/auth/drive.readonly",
@@ -46,25 +45,38 @@ def get_gsheet():
     gc = gspread.authorize(creds)
     return gc
 
-# HELPERS
+# CHAT API SERVICE
+def get_chat_service():
+    creds = Credentials.from_service_account_file(
+        SERVICE_ACCOUNT_FILE,
+        scopes=["https://www.googleapis.com/auth/chat.bot"]
+    )
+    return build("chat", "v1", credentials=creds)
 
+# GET COST ITEMS BY DEPARTMENT
 def get_cost_items_for_department(department: str) -> list:
     sheet = get_gsheet().open_by_key("1U19XSieDNaDGN0khJJ8vFaDG75DwdKjE53d6MWi0Nt8").worksheet(SHEET_TAB_NAME)
-    rows = sheet.get_all_values()[1:]
-    return list(set(row[3] for row in rows if len(row) > 3 and row[1].strip().lower() == department.lower()))
+    rows = sheet.get_all_values()[1:]  # From row 2
+    return list(set(row[3] for row in rows if len(row) > 3 and row[1].strip().lower() == department.lower() and row[3].strip()))
 
-def get_account_and_tracking(cost_item: str, department: str):
+# GET ACCOUNT, TRACKING, AND FINANCE REF FOR A COST ITEM
+def get_account_tracking_reference(cost_item: str, department: str):
     sheet = get_gsheet().open_by_key("1U19XSieDNaDGN0khJJ8vFaDG75DwdKjE53d6MWi0Nt8").worksheet(SHEET_TAB_NAME)
     rows = sheet.get_all_values()[1:]
     for row in rows:
         if len(row) >= 6 and row[3].strip().lower() == cost_item.lower() and row[1].strip().lower() == department.lower():
             account = row[0].strip()
             tracking = row[4].strip()
+            reference = row[5].strip()
             total_budget = row[17].replace(",", "") if len(row) > 17 else "0"
-            finance_ref = row[4] if len(row) > 4 else ""
-            return account, tracking, total_budget, finance_ref
-    return None, None, "0", ""
+            try:
+                total_budget = float(total_budget)
+            except:
+                total_budget = 0
+            return account, tracking, reference, total_budget
+    return None, None, None, 0
 
+# GET ACCOUNT TOTAL BUDGET
 def get_total_budget_for_account(account: str, department: str):
     sheet = get_gsheet().open_by_key("1U19XSieDNaDGN0khJJ8vFaDG75DwdKjE53d6MWi0Nt8").worksheet(SHEET_TAB_NAME)
     rows = sheet.get_all_values()[1:]
@@ -72,27 +84,32 @@ def get_total_budget_for_account(account: str, department: str):
     for row in rows:
         if len(row) >= 18 and row[0].strip().lower() == account.lower() and row[1].strip().lower() == department.lower():
             try:
-                value = float(row[17].replace(",", "").strip())
+                value = float(row[17].replace(",", ""))
                 total += value
             except:
                 pass
     return total
 
+# GET XERO YTD ACTUALS
 def get_actuals_for_account(account: str, department: str):
     sheet = get_gsheet().open_by_key("1U19XSieDNaDGN0khJJ8vFaDG75DwdKjE53d6MWi0Nt8").worksheet(XERO_TAB_NAME)
-    rows = sheet.get_all_values()[3:]
+    rows = sheet.get_all_values()[3:]  # Start from row 4
     total = 0.0
     for row in rows:
         if len(row) >= 15 and row[1].strip().lower() == account.lower() and row[14].strip().lower() == department.lower():
             try:
-                val = float(row[10].replace(",", "").strip())
-                total += val
+                total += float(row[10].replace(",", "").replace("-", "-"))
             except:
                 pass
     return total
 
-# MAIN BOT HANDLER
+# POST TO SHARED CHAT SPACE
+def post_to_shared_space(summary_text):
+    chat_service = get_chat_service()
+    message = {"text": summary_text}
+    chat_service.spaces().messages().create(parent=CHAT_SPACE_ID, body=message).execute()
 
+# MAIN BOT LOGIC
 @app.post("/")
 async def chat_webhook(request: Request):
     body = await request.json()
@@ -102,65 +119,80 @@ async def chat_webhook(request: Request):
     sender_email = sender.get("email", "").lower()
     full_name = sender.get("displayName", "there")
     first_name = full_name.split()[0]
-    message_text = body.get("message", {}).get("text", "").strip().lower()
+    message_text = body.get("message", {}).get("text", "").strip()
+
     user_state = user_states.get(sender_email)
 
-    # Greeting flow
-    if any(message_text.startswith(greet) for greet in greeting_triggers):
+    # Handle file upload
+    if "attachment" in body.get("message", {}):
+        cost_item = user_states.get(f"{sender_email}_cost_item")
+        account = user_states.get(f"{sender_email}_account")
+        department = user_states.get(f"{sender_email}_department")
+        reference = user_states.get(f"{sender_email}_reference")
+
+        summary_text = (
+            f"📩 *New PO Request Received!*
+\n*Cost Item:* {cost_item}
+\n*Account:* {account}
+\n*Department:* {department}
+\n*Projects/Events/Budgets:* {reference}")
+
+        post_to_shared_space(summary_text)
+
+        return {
+            "text": (
+                "✅ Quote received successfully!\n"
+                "I've shared the PO request details with the Procurement team in the shared space.\n\n"
+                "Now just a couple of final questions:\n"
+                "1️⃣ Does this quote require any upfront payments?\n"
+                "2️⃣ Is this a foreign payment that requires GSA approval?"
+            )
+        }
+
+    # GREETING
+    if any(message_text.lower().startswith(greet) for greet in greeting_triggers):
         if sender_email in special_users:
-            user_states[sender_email] = "awaiting_department_selection"
-            return {
-                "text": f"Hi {first_name},\nWhat department would you like to raise a PO for?\nOptions: {', '.join(all_departments)}"
-            }
-        elif sender_email in dept_users:
-            department = dept_users[sender_email]
+            user_states[sender_email] = "awaiting_department"
+            return {"text": f"Hi {first_name},\nWhat department would you like to raise a PO for?\nOptions: {', '.join(all_departments)}"}
+        elif sender_email in department_managers:
+            department = department_managers[sender_email]
+            items = get_cost_items_for_department(department)
             user_states[sender_email] = "awaiting_cost_item"
             user_states[f"{sender_email}_department"] = department
-            items = get_cost_items_for_department(department)
-            item_list = "\n- ".join(items)
-            return {
-                "text": f"Hi {first_name},\nHere are the available cost items for {department}:\n- {item_list}"
-            }
+            return {"text": f"Hi {first_name},\nHere are the cost items for {department}:\n- " + "\n- ".join(item for item in items if item.strip())}
 
-    # Department selection
-    if user_state == "awaiting_department_selection":
+    # SPECIAL USER DEPARTMENT SELECTION
+    if user_state == "awaiting_department":
         if message_text.title() in all_departments:
             department = message_text.title()
+            items = get_cost_items_for_department(department)
             user_states[sender_email] = "awaiting_cost_item"
             user_states[f"{sender_email}_department"] = department
-            items = get_cost_items_for_department(department)
-            item_list = "\n- ".join(items)
-            return {
-                "text": f"Thanks {first_name}. Here are the cost items for {department}:\n- {item_list}"
-            }
+            return {"text": f"Thanks {first_name}. Here are the cost items for {department}:\n- " + "\n- ".join(item for item in items if item.strip())}
         else:
             return {"text": f"Department not recognized. Choose from: {', '.join(all_departments)}"}
 
-    # Cost item selection
+    # COST ITEM SELECTION
     if user_state == "awaiting_cost_item":
-        department = user_states.get(f"{sender_email}_department", "Finance")
-        cost_item = message_text.title()
-        account, tracking, cost_item_total, finance_ref = get_account_and_tracking(cost_item, department)
+        department = user_states.get(f"{sender_email}_department")
+        account, tracking, reference, item_total = get_account_tracking_reference(message_text, department)
         if account:
             account_total = get_total_budget_for_account(account, department)
-            ytd_actuals = get_actuals_for_account(account, department)
-
-            user_states[sender_email] = "awaiting_quote"
-            user_states[f"{sender_email}_cost_item"] = cost_item
+            actuals = get_actuals_for_account(account, department)
+            user_states[sender_email] = "awaiting_file"
+            user_states[f"{sender_email}_cost_item"] = message_text.title()
             user_states[f"{sender_email}_account"] = account
-            user_states[f"{sender_email}_tracking"] = tracking
-            user_states[f"{sender_email}_finance_ref"] = finance_ref
+            user_states[f"{sender_email}_reference"] = reference
             return {
                 "text": (
-                    f"✅ Great, you've selected: {cost_item} under {department}\n\n"
-                    f"📊 Budgeted for item: {int(float(cost_item_total)):,}\n"
+                    f"✅ Great, you've selected: {message_text.title()} under {department}\n\n"
+                    f"📊 Budgeted for item: {int(item_total):,}\n"
                     f"📊 Budgeted total for account '{account}': {int(account_total):,}\n"
-                    f"📊 YTD actuals for '{account}': {int(ytd_actuals):,}\n\n"
+                    f"📊 YTD actuals for '{account}': {int(actuals):,}\n\n"
                     "You can now upload the quote here to continue - Just a few more questions and we're done."
                 )
             }
         else:
             return {"text": f"That cost item wasn't recognized for {department}. Try again."}
 
-    # Default fallback
     return {"text": "I'm not sure how to help with that. Start with 'Hi' or type a cost item."}
