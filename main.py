@@ -56,7 +56,9 @@ def get_budget_for_cost_item_and_account(dept, item):
 
         if row_dept == dept.lower() and row_item == item.lower():
             account_name = row_account
-            total_item_budget = sum(float(v.replace(",", "")) if v else 0 for v in monthly_values)
+            total_item_budget = sum(
+    		float(v.replace(",", "")) for v in monthly_values if v.replace(",", "").strip().replace("-", "").isdigit()
+	    )
             break
 
     if account_name:
