@@ -139,7 +139,7 @@ async def chat_webhook(request: Request):
             f"*Account:* {account}\n"
             f"*Department:* {department}\n"
             f"*Projects/Events/Budgets:* {reference}\n"
-            f"Please make sure that the approved PO is sent to {first_name}."
+            f"\nPlease make sure that the approved PO is sent to {first_name}."
         )
 
         post_to_shared_space(summary_text)
@@ -148,7 +148,8 @@ async def chat_webhook(request: Request):
         return {
             "text": (
                 "✅ Quote received successfully!\n"
-                "I've shared the PO request details with the Procurement team in the shared space.\n\n"
+                "I've shared the PO request details with the Procurement team.\n\n"
+                "Now just a couple of final questions:\n"
                 "1️⃣ Does this quote require any upfront payments?"
             )
         }
