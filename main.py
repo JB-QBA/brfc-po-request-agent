@@ -134,24 +134,47 @@ async def chat_webhook(request: Request):
         reference = user_states.get(f"{sender_email}_reference")
 
         summary_text = (
-    f"📩 *New PO Request Received!*\n"
-    f"*Cost Item:* {cost_item}\n"
-    f"*Account:* {account}\n"
-    f"*Department:* {department}\n"
-    f"*Projects/Events/Budgets:* {reference}"
-)
+            f"📩 *New PO Request Received!*\n"
+            f"*Cost Item:* {cost_item}\n"
+            f"*Account:* {account}\n"
+            f"*Department:* {department}\n"
+            f"*Projects/Events/Budgets:* {reference}\n"
+            f"Please make sure that the approved PO is sent to {first_name}."
+        )
 
         post_to_shared_space(summary_text)
+        user_states[sender_email] = "awaiting_q1"
 
         return {
             "text": (
                 "✅ Quote received successfully!\n"
                 "I've shared the PO request details with the Procurement team in the shared space.\n\n"
-                "Now just a couple of final questions:\n"
-                "1️⃣ Does this quote require any upfront payments?\n"
-                "2️⃣ Is this a foreign payment that requires GSA approval?"
+                "1️⃣ Does this quote require any upfront payments?"
             )
         }
+
+    # Handle Q1
+    if user_state == "awaiting_q1":
+        user_states[f"{sender_email}_q1"] = message_text
+        user_states[sender_email] = "awaiting_q2"
+        return {"text": "2️⃣ Is this a foreign payment that requires GSA approval?"}
+
+    # Handle Q2
+    if user_state == "awaiting_q2":
+        q1 = user_states.get(f"{sender_email}_q1")
+        q2 = message_text
+
+        summary = (
+            f"📋 *Finance Responses Received*\n"
+            f"*From:* {first_name}\n"
+            f"1️⃣ Upfront Payment Required: {q1}\n"
+            f"2️⃣ Foreign Payment / GSA Approval: {q2}"
+        )
+
+        post_to_shared_space(summary)
+        user_states[sender_email] = None
+
+        return {"text": f"Thanks for your time, {first_name}! You're all done."}
 
     # GREETING
     if any(message_text.lower().startswith(greet) for greet in greeting_triggers):
@@ -193,7 +216,7 @@ async def chat_webhook(request: Request):
                     f"📊 Budgeted for item: {int(item_total):,}\n"
                     f"📊 Budgeted total for account '{account}': {int(account_total):,}\n"
                     f"📊 YTD actuals for '{account}': {int(actuals):,}\n\n"
-                    "You can now upload the quote here to continue - Just a few more questions and we're done."
+                    "You can now upload the quote here to continue, and then just a couple more questions and we're done."
                 )
             }
         else:
