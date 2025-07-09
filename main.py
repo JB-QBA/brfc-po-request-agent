@@ -117,14 +117,17 @@ async def chat_webhook(request: Request):
             user_states[f"{sender_email}_department"] = department
             items = get_cost_items_for_department(department)
             return {
-                "text": f"Hi {first_name},\nHere are the available cost items for {department}:\n- " + "\n- ".join(items)
-            }
+    "text": (
+        f"Hi {first_name},\nHere are the available cost items for Finance:\n"
+        + "\n".join(f"- {item}" for item in items)
+    )
+}
         else:
             user_states[sender_email] = "awaiting_cost_item"
             user_states[f"{sender_email}_department"] = "Finance"
             items = get_cost_items_for_department("Finance")
             return {
-                "text": f"Hi {first_name},\nHere are the available cost items for Finance:\n- " + "\n- ".join(items)
+                "text": f"Hi {first_name},\nHere are the available cost items for Finance:\n" + "\n- ".join(f"- {item}" for item in items)
             }
 
     # SPECIAL USER DEPARTMENT SELECTION
@@ -135,8 +138,11 @@ async def chat_webhook(request: Request):
             user_states[f"{sender_email}_department"] = department
             items = get_cost_items_for_department(department)
             return {
-                "text": f"Thanks {first_name}. "Here are the cost items for {department}:\n" + "\n- ".join(f"- {item}" for item in items)
-            }
+    "text": (
+        f"Thanks {first_name}. Here are the cost items for {message_text.title()}:\n"
+        + "\n".join(f"- {item}" for item in items)
+    )
+}
         else:
             return {"text": f"Department not recognized. Choose from: {', '.join(all_departments)}"}
 
