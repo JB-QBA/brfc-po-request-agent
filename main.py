@@ -134,11 +134,11 @@ async def chat_webhook(request: Request):
             user_states[f"{sender_email}_cost_item"] = message_text.title()
             return {
                 "text": (
-                    f"Great, you've selected: {message_text.title()} under {department}\n\n"
-                    f"• Budgeted for item: {cost_item_total}\n"
-                    f"• Budgeted total for account '{account}': {account_total}\n"
-                    f"• YTD actuals for '{account}': {ytd_actuals}\n\n"
-                    "Please upload the quote here to continue."
+                    f"✅ Great, you've selected: {message_text.title()} under {department}\n\n"
+                    f"📊 Budgeted for item: {int(float(cost_item_total)):,}\n"
+                    f"📊 Budgeted total for account '{account}': {int(account_total):,}\n"
+                    f"📊 YTD actuals for '{account}': {int(ytd_actuals):,}\n\n"
+                    "You can now upload the quote here to continue - Just a few more questions and we're done."
                 )
             }
         else:
