@@ -62,18 +62,31 @@ def get_cost_items_for_department(department: str) -> list:
 # GET ACCOUNT, TRACKING, AND FINANCE REF FOR A COST ITEM
 def get_account_tracking_reference(cost_item: str, department: str):
     sheet = get_gsheet().open_by_key("1U19XSieDNaDGN0khJJ8vFaDG75DwdKjE53d6MWi0Nt8").worksheet(SHEET_TAB_NAME)
-    rows = sheet.get_all_values()[1:]
-    for row in rows:
-        if len(row) >= 6 and row[3].strip().lower() == cost_item.lower() and row[1].strip().lower() == department.lower():
-            account = row[0].strip()
-            tracking = row[4].strip()
-            reference = row[5].strip()
-            total_budget = row[17].replace(",", "") if len(row) > 17 else "0"
-            try:
-                total_budget = float(total_budget)
-            except:
-                total_budget = 0
-            return account, tracking, reference, total_budget
+    rows = sheet.get_all_values()
+    headers = rows[0]
+    data_rows = rows[1:]
+
+    # Identify column positions dynamically
+    account_idx = headers.index("Account") if "Account" in headers else 0
+    dept_idx = headers.index("Department") if "Department" in headers else 1
+    item_idx = headers.index("Cost Item") if "Cost Item" in headers else 3
+    tracking_idx = headers.index("Tracking") if "Tracking" in headers else 4
+    ref_idx = headers.index("Finance Reference") if "Finance Reference" in headers else 5
+    total_idx = headers.index("Total") if "Total" in headers else 17
+
+    for row in data_rows:
+        if len(row) > max(account_idx, dept_idx, item_idx, tracking_idx, ref_idx, total_idx):
+            if row[item_idx].strip().lower() == cost_item.lower() and row[dept_idx].strip().lower() == department.lower():
+                account = row[account_idx].strip()
+                tracking = row[tracking_idx].strip()
+                reference = row[ref_idx].strip()
+                total_str = row[total_idx].replace(",", "") if row[total_idx] else "0"
+                try:
+                    total_budget = float(total_str)
+                except:
+                    total_budget = 0
+                return account, tracking, reference, total_budget
+
     return None, None, None, 0
 
 # GET ACCOUNT TOTAL BUDGET
