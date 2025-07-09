@@ -96,11 +96,14 @@ def get_actuals_for_account(account: str, department: str):
     rows = sheet.get_all_values()[3:]  # Start from row 4
     total = 0.0
     for row in rows:
-        if len(row) >= 15 and row[1].strip().lower() == account.lower() and row[14].strip().lower() == department.lower():
+        if len(row) >= 15 and row[1].strip().lower() == account.strip().lower() and row[14].strip().lower() == department.lower():
             try:
-                total += float(row[10].replace(",", "").replace("-", "-"))
-            except:
-                pass
+                val = row[10].strip()
+                val = val.replace("−", "-").replace("–", "-").replace("₩", "").replace("$", "").replace(",", "")
+                val = val.replace(" ", "")
+                total += float(val)
+            except Exception as e:
+                print(f"Skipping value '{row[10]}' due to error: {e}")
     return total
 
 # POST TO SHARED CHAT SPACE
