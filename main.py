@@ -17,6 +17,15 @@ special_users = {
     "generalmanager@bahrainrfc.com": "Paul"
 }
 
+user_department_map = {
+    "hr@bahrainrfc.com": "Human Capital",
+    "facilities@bahrainrfc.com": "Facilities",
+    "clubhouse@bahrainrfc.com": "Clubhouse",
+    "sports@bahrainrfc.com": "Sports",
+    "marketing@bahrainrfc.com": "Marketing",
+    "sponsorship@bahrainrfc.com": "Sponsorship"
+}
+
 all_departments = [
     "Clubhouse", "Facilities", "Finance", "Front Office",
     "Human Capital", "Management", "Marketing", "Sponsorship", "Sports"
@@ -37,49 +46,48 @@ def get_gsheet():
 # GET COST ITEMS BY DEPARTMENT
 def get_cost_items_for_department(department: str) -> list:
     sheet = get_gsheet().open_by_key("1U19XSieDNaDGN0khJJ8vFaDG75DwdKjE53d6MWi0Nt8").worksheet(SHEET_TAB_NAME)
-    rows = sheet.get_all_values()[1:]  # From row 2
+    rows = sheet.get_all_values()[1:]
     return list(set(row[3] for row in rows if len(row) > 3 and row[1].strip().lower() == department.lower()))
 
-# GET ACCOUNT & TRACKING FOR A COST ITEM
+# GET ACCOUNT, TRACKING, AND BUDGET FOR A COST ITEM
 def get_account_and_tracking(cost_item: str, department: str):
     sheet = get_gsheet().open_by_key("1U19XSieDNaDGN0khJJ8vFaDG75DwdKjE53d6MWi0Nt8").worksheet(SHEET_TAB_NAME)
     rows = sheet.get_all_values()[1:]
     for row in rows:
         if len(row) >= 5 and row[3].strip().lower() == cost_item.lower() and row[1].strip().lower() == department.lower():
             account = row[0].strip()
-            tracking = row[4].strip()
-            total_budget = row[17].strip().replace(",", "") if len(row) > 17 else "0"
+            tracking = row[4]
+            total_budget = row[17] if len(row) > 17 else "0"
             return account, tracking, total_budget
     return None, None, "0"
 
-# GET BUDGET TOTAL FOR ACCOUNT IN DEPARTMENT
+# GET TOTAL BUDGET FOR ACCOUNT
 def get_total_budget_for_account(account: str, department: str):
     sheet = get_gsheet().open_by_key("1U19XSieDNaDGN0khJJ8vFaDG75DwdKjE53d6MWi0Nt8").worksheet(SHEET_TAB_NAME)
     rows = sheet.get_all_values()[1:]
     total = 0.0
     for row in rows:
-        if len(row) >= 18 and row[0].strip().lower() == account.strip().lower() and row[1].strip().lower() == department.lower():
+        if len(row) >= 18 and row[0].strip() == account and row[1].strip().lower() == department.lower():
             try:
-                value = float(row[17].strip().replace(",", ""))
+                value = float(str(row[17]).replace(",", "").strip())
                 total += value
             except:
                 pass
     return total
 
-# GET XERO YTD ACTUALS
+# GET YTD ACTUALS FROM XERO SHEET
 def get_actuals_for_account(account: str, department: str):
     sheet = get_gsheet().open_by_key("1U19XSieDNaDGN0khJJ8vFaDG75DwdKjE53d6MWi0Nt8").worksheet(XERO_TAB_NAME)
-    rows = sheet.get_all_values()[3:]  # Start from row 4
+    rows = sheet.get_all_values()[3:]  # Data starts from row 4
     total = 0.0
     for row in rows:
-        if len(row) >= 15 and row[1].strip().lower() == account.strip().lower() and row[14].strip().lower() == department.lower():
+        if len(row) >= 15 and row[1].strip() == account and row[14].strip().lower() == department.lower():
             try:
-                val = row[10].strip()
-                val = val.replace("−", "-").replace("–", "-").replace("₩", "").replace("$", "").replace(",", "")
-                val = val.replace(" ", "")
-                total += float(val)
-            except Exception as e:
-                print(f"Skipping value '{row[10]}' due to error: {e}")
+                val = str(row[10]).replace(",", "").strip()
+                if val:
+                    total += float(val)
+            except:
+                pass
     return total
 
 # MAIN CHATBOT HANDLER
@@ -103,6 +111,14 @@ async def chat_webhook(request: Request):
             return {
                 "text": f"Hi {first_name},\nWhat department would you like to raise a PO for?\nOptions: {', '.join(all_departments)}"
             }
+        elif sender_email in user_department_map:
+            department = user_department_map[sender_email]
+            user_states[sender_email] = "awaiting_cost_item"
+            user_states[f"{sender_email}_department"] = department
+            items = get_cost_items_for_department(department)
+            return {
+                "text": f"Hi {first_name},\nHere are the available cost items for {department}:\n- " + "\n- ".join(items)
+            }
         else:
             user_states[sender_email] = "awaiting_cost_item"
             user_states[f"{sender_email}_department"] = "Finance"
@@ -111,14 +127,15 @@ async def chat_webhook(request: Request):
                 "text": f"Hi {first_name},\nHere are the available cost items for Finance:\n- " + "\n- ".join(items)
             }
 
-    # SPECIAL USER CHOOSES DEPARTMENT
+    # SPECIAL USER DEPARTMENT SELECTION
     if user_state == "awaiting_department_selection":
         if message_text.title() in all_departments:
+            department = message_text.title()
             user_states[sender_email] = "awaiting_cost_item"
-            user_states[f"{sender_email}_department"] = message_text.title()
-            items = get_cost_items_for_department(message_text.title())
+            user_states[f"{sender_email}_department"] = department
+            items = get_cost_items_for_department(department)
             return {
-                "text": f"Thanks {first_name}. Here are the cost items for {message_text.title()}:\n- " + "\n- ".join(items)
+                "text": f"Thanks {first_name}. Here are the cost items for {department}:\n- " + "\n- ".join(items)
             }
         else:
             return {"text": f"Department not recognized. Choose from: {', '.join(all_departments)}"}
@@ -132,18 +149,21 @@ async def chat_webhook(request: Request):
             ytd_actuals = get_actuals_for_account(account, department)
             user_states[sender_email] = "awaiting_quote"
             user_states[f"{sender_email}_cost_item"] = message_text.title()
+            user_states[f"{sender_email}_account"] = account
+            user_states[f"{sender_email}_tracking"] = tracking
             return {
                 "text": (
                     f"✅ Great, you've selected: {message_text.title()} under {department}\n\n"
                     f"📊 Budgeted for item: {int(float(cost_item_total)):,}\n"
                     f"📊 Budgeted total for account '{account}': {int(account_total):,}\n"
                     f"📊 YTD actuals for '{account}': {int(ytd_actuals):,}\n\n"
-                    "You can now upload the quote here to continue - Just a few more questions and we're done."
+                    "You can now upload the quote here to continue – just a few more questions and we're done."
                 )
             }
         else:
             return {"text": f"That cost item wasn't recognized for {department}. Try again."}
 
+    # DEFAULT RESPONSE
     return {
         "text": "I'm not sure how to help with that. Start with 'Hi' or type a cost item."
     }
