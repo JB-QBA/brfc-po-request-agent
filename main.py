@@ -55,16 +55,17 @@ def get_account_and_tracking(cost_item: str, department: str):
 # GET TOTAL BUDGET FOR AN ACCOUNT (account-level sum across department)
 def get_total_budget_for_account(account: str, department: str):
     sheet = get_gsheet().open_by_key("1U19XSieDNaDGN0khJJ8vFaDG75DwdKjE53d6MWi0Nt8").worksheet(SHEET_TAB_NAME)
-    rows = sheet.get_all_values()[1:]  # Skip header
+    rows = sheet.get_all_values()[1:]
     total = 0.0
     for row in rows:
         if len(row) >= 18:
-            acc_name = row[0].strip().lower()
-            dept_name = row[1].strip().lower()
-            if acc_name == account.strip().lower() and dept_name == department.strip().lower():
-                value = row[17].strip().replace(",", "").replace("−", "-").replace("–", "-").replace("—", "-")
+            acc = row[0].strip().lower()
+            dept = row[1].strip().lower()
+            val = row[17].strip()
+            if acc == account.strip().lower() and dept == department.strip().lower():
                 try:
-                    total += float(value)
+                    clean_val = val.replace(",", "").replace(" ", "").replace("-", "0")
+                    total += float(clean_val)
                 except ValueError:
                     continue
     return total
