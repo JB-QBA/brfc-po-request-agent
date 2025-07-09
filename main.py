@@ -6,135 +6,114 @@ from google.oauth2.service_account import Credentials
 app = FastAPI()
 user_states = {}
 
-# Hardcoded config
+# --- Config ---
 SERVICE_ACCOUNT_FILE = "/etc/secrets/winged-pen-413708-e9544129b499.json"
 SPREADSHEET_ID = "1U19XSieDNaDGN0khJJ8vFaDG75DwdKjE53d6MWi0Nt8"
 SHEET_TAB_NAME = "FY2025Budget"
+
 special_users = {
     "finance@bahrainrfc.com": "Johann",
     "generalmanager@bahrainrfc.com": "Paul"
 }
+
 all_departments = [
     "Clubhouse", "Facilities", "Finance", "Front Office",
     "Human Capital", "Management", "Marketing", "Sponsorship", "Sports"
 ]
+
+# --- Triggers ---
 greeting_triggers = ["hi", "hello", "hey", "howzit", "salam"]
 
-def get_first_name(full_name: str) -> str:
-    return full_name.split()[0]
-
-def get_sheet():
-    scopes = [
-        "https://www.googleapis.com/auth/drive.readonly",
-        "https://www.googleapis.com/auth/spreadsheets"
-    ]
-    creds = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=scopes)
-    gc = gspread.authorize(creds)
-    return gc.open_by_key(SPREADSHEET_ID).worksheet(SHEET_TAB_NAME)
-
+# --- Helper: Get cost items for department ---
 def get_cost_items_for_department(department: str) -> list:
-    sheet = get_sheet()
-    rows = sheet.get_all_values()[1:]  # Starting at row 2 (after header)
-    return list(set([
-        row[3] for row in rows if len(row) > 3 and row[1].strip().lower() == department.lower()
-    ]))
+    creds = Credentials.from_service_account_file(
+        SERVICE_ACCOUNT_FILE,
+        scopes=[
+            "https://www.googleapis.com/auth/drive.readonly",
+            "https://www.googleapis.com/auth/spreadsheets"
+        ]
+    )
+    gc = gspread.authorize(creds)
+    sheet = gc.open_by_key(SPREADSHEET_ID).worksheet(SHEET_TAB_NAME)
+    rows = sheet.get_all_values()[1:]  # Start from row 2
+    cost_items = [row[3] for row in rows if len(row) > 3 and row[1].strip().lower() == department.lower()]
+    return list(set(filter(None, cost_items)))
 
-def get_budget_total_for_cost_item(department: str, cost_item: str) -> str:
-    sheet = get_sheet()
-    rows = sheet.get_all_values()[1:]  # Starting at row 2 (after header)
+# --- Helper: Get budget total for cost item ---
+def get_budget_total_for_item(department: str, cost_item: str) -> str:
+    creds = Credentials.from_service_account_file(
+        SERVICE_ACCOUNT_FILE,
+        scopes=[
+            "https://www.googleapis.com/auth/drive.readonly",
+            "https://www.googleapis.com/auth/spreadsheets"
+        ]
+    )
+    gc = gspread.authorize(creds)
+    sheet = gc.open_by_key(SPREADSHEET_ID).worksheet(SHEET_TAB_NAME)
+    rows = sheet.get_all_values()[1:]
     for row in rows:
         if (
-            len(row) > 17 and
-            row[1].strip().lower() == department.lower() and
-            row[3].strip().lower() == cost_item.lower()
+            len(row) >= 18
+            and row[1].strip().lower() == department.lower()
+            and row[3].strip().lower() == cost_item.lower()
         ):
-            return row[17]
-    return None
+            return row[17]  # Column R = index 17
+    return "Not found"
 
+# --- Route ---
 @app.post("/")
 async def chat_webhook(request: Request):
     body = await request.json()
     print("Received request:", json.dumps(body, indent=2))
 
     sender = body.get("message", {}).get("sender", {})
-    sender_name = sender.get("displayName", "there")
+    sender_name = sender.get("displayName", "there").split()[0]  # First name only
     sender_email = sender.get("email", "").lower()
     message_text = body.get("message", {}).get("text", "").strip().lower()
     user_state = user_states.get(sender_email)
 
-    first_name = get_first_name(sender_name)
-
+    # Greet and initiate
     if any(message_text.startswith(greet) for greet in greeting_triggers):
         if sender_email in special_users:
             user_states[sender_email] = "awaiting_department_selection"
             return {
-                "text": f"Hi {first_name},\nWhat department would you like to raise a PO for?\nOptions: {', '.join(all_departments)}"
+                "text": f"Hi {sender_name},\nWhat department would you like to raise a PO for?\nOptions: {', '.join(all_departments)}"
             }
         else:
-            user_states[sender_email] = "awaiting_department_confirmation"
-            return {
-                "text": f"Hi {first_name},\nAre we getting the PO details for the Finance department?"
-            }
+            # For non-special users, infer department and show cost items directly
+            default_dept = "Finance"  # Optionally adjust per user
+            user_states[sender_email] = "awaiting_cost_item_selection"
+            user_states[f"{sender_email}_department"] = default_dept
+            cost_items = get_cost_items_for_department(default_dept)
+            reply = f"Hi {sender_name}, here are the available cost items for {default_dept}:\n- " + "\n- ".join(cost_items[:10])
+            return {"text": reply}
 
-    if user_state == "awaiting_department_confirmation":
-        if message_text in ["yes", "correct"]:
-            user_states[sender_email] = "awaiting_cost_item_choice"
-            user_states[f"{sender_email}_department"] = "Finance"
-            return {
-                "text": "Thanks for confirming.\nDo you know the cost item or would you like to choose from the list?\nOptions:\n- Yes, I know it\n- I’ll choose from list"
-            }
-        else:
-            user_states[sender_email] = "awaiting_manual_department"
-            return {"text": "To which department does this PO belong?"}
-
+    # Special users choosing department
     if user_state == "awaiting_department_selection":
         if message_text.title() in all_departments:
-            user_states[sender_email] = "awaiting_cost_item_choice"
+            user_states[sender_email] = "awaiting_cost_item_selection"
             user_states[f"{sender_email}_department"] = message_text.title()
-            return {
-                "text": f"Thanks for confirming the department: {message_text.title()}.\nDo you know the cost item or would you like to choose from the list?\nOptions:\n- Yes, I know it\n- I’ll choose from list"
-            }
+            cost_items = get_cost_items_for_department(message_text.title())
+            reply = f"Thanks! Here are the cost items for {message_text.title()}:\n- " + "\n- ".join(cost_items[:10])
+            return {"text": reply}
         else:
-            return {"text": f"That department isn't recognized. Please choose from:\n{', '.join(all_departments)}"}
+            return {"text": f"That department isn't recognized. Choose from:\n{', '.join(all_departments)}"}
 
-    if user_state == "awaiting_manual_department":
-        if message_text.title() in all_departments:
-            user_states[sender_email] = "awaiting_cost_item_choice"
-            user_states[f"{sender_email}_department"] = message_text.title()
-            return {
-                "text": f"Got it. Working with the {message_text.title()} department.\nDo you know the cost item or would you like to choose from the list?"
-            }
-        else:
-            return {"text": f"Please reply with a valid department name.\nOptions: {', '.join(all_departments)}"}
-
-    if user_state == "awaiting_cost_item_choice":
-        if message_text in ["yes", "i know it", "i'll type it"]:
-            user_states[sender_email] = "awaiting_cost_item_name"
-            return {"text": "Great, please type the cost item you'd like this PO to be allocated against."}
-        else:
-            department = user_states.get(f"{sender_email}_department", "Finance")
-            cost_items = get_cost_items_for_department(department)
-            return {
-                "text": f"Here are the available cost items for {department}:\n- " + "\n- ".join(cost_items[:10])
-            }
-
-    if user_state == "awaiting_cost_item_name":
+    # Receiving cost item selection
+    if user_state == "awaiting_cost_item_selection":
         department = user_states.get(f"{sender_email}_department", "Finance")
         cost_items = get_cost_items_for_department(department)
-        matched_items = [item for item in cost_items if message_text in item.lower()]
-        if matched_items:
-            selected_item = matched_items[0]
-            user_states[sender_email] = "awaiting_quote_upload"
-            user_states[f"{sender_email}_cost_item"] = selected_item
-            total_budget = get_budget_total_for_cost_item(department, selected_item)
+        match = next((item for item in cost_items if item.lower() == message_text), None)
+        if match:
+            user_states[sender_email] = "awaiting_quote"
+            total = get_budget_total_for_item(department, match)
             return {
-                "text": f"Cost item '{selected_item}' confirmed for {department}.\nBudgeted total: {total_budget or 'not found'}\n\nPlease upload or paste the quote for this PO."
+                "text": f"✅ Cost item confirmed: {match}\n📊 Budgeted Total: {total}\n\n📎 Please upload the quote for this PO request."
             }
         else:
             return {
-                "text": f"That cost item wasn't recognized for {department}.\nHere are a few options you can choose from:\n- " + "\n- ".join(cost_items[:10])
+                "text": f"Sorry, that doesn’t match any cost items in {department}.\nTry again or pick from:\n- " + "\n- ".join(cost_items[:10])
             }
 
-    return {
-        "text": "I'm not sure how to help with that. Start again with 'Hi' or choose a department."
-    }
+    # Fallback
+    return {"text": "I'm not sure how to help with that. Please start with 'Hi' or pick a department."}
