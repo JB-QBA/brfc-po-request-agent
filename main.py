@@ -66,7 +66,6 @@ def get_account_tracking_reference(cost_item: str, department: str):
     headers = rows[0]
     data_rows = rows[1:]
 
-    # Identify column positions dynamically
     account_idx = headers.index("Account") if "Account" in headers else 0
     dept_idx = headers.index("Department") if "Department" in headers else 1
     item_idx = headers.index("Cost Item") if "Cost Item" in headers else 3
@@ -106,7 +105,7 @@ def get_total_budget_for_account(account: str, department: str):
 # GET XERO YTD ACTUALS
 def get_actuals_for_account(account: str, department: str):
     sheet = get_gsheet().open_by_key("1U19XSieDNaDGN0khJJ8vFaDG75DwdKjE53d6MWi0Nt8").worksheet(XERO_TAB_NAME)
-    rows = sheet.get_all_values()[3:]  # Start from row 4
+    rows = sheet.get_all_values()[3:]
     total = 0.0
     for row in rows:
         if len(row) >= 15 and row[1].strip().lower() == account.strip().lower() and row[14].strip().lower() == department.lower():
@@ -139,7 +138,6 @@ async def chat_webhook(request: Request):
 
     user_state = user_states.get(sender_email)
 
-    # Handle file upload
     if "attachment" in body.get("message", {}):
         cost_item = user_states.get(f"{sender_email}_cost_item")
         account = user_states.get(f"{sender_email}_account")
@@ -150,17 +148,24 @@ async def chat_webhook(request: Request):
         file_name = attachment.get("name", "Unnamed file")
         file_url = attachment.get("downloadUri", "File not available")
 
-        summary_text = (
+        message_1 = (
             f"📩 *New PO Request Received!*\n"
             f"*Cost Item:* {cost_item}\n"
             f"*Account:* {account}\n"
             f"*Department:* {department}\n"
-            f"*Projects/Events/Budgets:* {reference}\n"
-            f"*Quote File:* [{file_name}]({file_url})\n\n"
+            f"*Projects/Events/Budgets:* {reference}\n\n"
             f"Please make sure that the approved PO is sent to {first_name}."
         )
 
-        post_to_shared_space(summary_text)
+        message_2 = (
+            f"📎 Please download the shared file from the link below and send it to:\n"
+            f"bahrain-rugby-football-club-po@mail.approvalmax.com\n"
+            f"for ApprovalMax extraction:\n\n"
+            f"*Quote File:* [{file_name}]({file_url})"
+        )
+
+        post_to_shared_space(message_1)
+        post_to_shared_space(message_2)
         user_states[sender_email] = "awaiting_q1"
 
         return {
@@ -172,13 +177,11 @@ async def chat_webhook(request: Request):
             )
         }
 
-    # Handle Q1
     if user_state == "awaiting_q1":
         user_states[f"{sender_email}_q1"] = message_text
         user_states[sender_email] = "awaiting_q2"
         return {"text": "2️⃣ Is this a foreign payment that requires GSA approval?"}
 
-    # Handle Q2
     if user_state == "awaiting_q2":
         q1 = user_states.get(f"{sender_email}_q1")
         q2 = message_text
@@ -195,7 +198,6 @@ async def chat_webhook(request: Request):
 
         return {"text": f"Thanks for your time, {first_name}! You're all done."}
 
-    # GREETING
     if any(message_text.lower().startswith(greet) for greet in greeting_triggers):
         if sender_email in special_users:
             user_states[sender_email] = "awaiting_department"
@@ -207,7 +209,6 @@ async def chat_webhook(request: Request):
             user_states[f"{sender_email}_department"] = department
             return {"text": f"Hi {first_name},\nHere are the cost items for {department}:\n- " + "\n- ".join(item for item in items if item.strip())}
 
-    # SPECIAL USER DEPARTMENT SELECTION
     if user_state == "awaiting_department":
         if message_text.title() in all_departments:
             department = message_text.title()
@@ -218,7 +219,6 @@ async def chat_webhook(request: Request):
         else:
             return {"text": f"Department not recognized. Choose from: {', '.join(all_departments)}"}
 
-    # COST ITEM SELECTION
     if user_state == "awaiting_cost_item":
         department = user_states.get(f"{sender_email}_department")
         account, tracking, reference, item_total = get_account_tracking_reference(message_text, department)
