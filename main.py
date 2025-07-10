@@ -56,7 +56,7 @@ def get_chat_service():
 # GET COST ITEMS BY DEPARTMENT
 def get_cost_items_for_department(department: str) -> list:
     sheet = get_gsheet().open_by_key("1U19XSieDNaDGN0khJJ8vFaDG75DwdKjE53d6MWi0Nt8").worksheet(SHEET_TAB_NAME)
-    rows = sheet.get_all_values()[1:]  # From row 2
+    rows = sheet.get_all_values()[1:]
     return list(set(row[3] for row in rows if len(row) > 3 and row[1].strip().lower() == department.lower() and row[3].strip()))
 
 # GET ACCOUNT, TRACKING, AND FINANCE REF FOR A COST ITEM
@@ -161,5 +161,26 @@ async def chat_webhook(request: Request):
             }
         else:
             return {"text": f"That cost item wasn't recognized for {department}. Try again."}
+
+    if any(message_text.lower().startswith(greet) for greet in greeting_triggers):
+        if sender_email in special_users:
+            user_states[sender_email] = "awaiting_department"
+            return {"text": f"Hi {first_name},\nWhat department would you like to raise a PO for?\nOptions: {', '.join(all_departments)}"}
+        elif sender_email in department_managers:
+            department = department_managers[sender_email]
+            items = get_cost_items_for_department(department)
+            user_states[sender_email] = "awaiting_cost_item"
+            user_states[f"{sender_email}_department"] = department
+            return {"text": f"Hi {first_name},\nHere are the cost items for {department}:\n- " + "\n- ".join(item for item in items if item.strip())}
+
+    if user_state == "awaiting_department":
+        if message_text.title() in all_departments:
+            department = message_text.title()
+            items = get_cost_items_for_department(department)
+            user_states[sender_email] = "awaiting_cost_item"
+            user_states[f"{sender_email}_department"] = department
+            return {"text": f"Thanks {first_name}. Here are the cost items for {department}:\n- " + "\n- ".join(item for item in items if item.strip())}
+        else:
+            return {"text": f"Department not recognized. Choose from: {', '.join(all_departments)}"}
 
     return {"text": "I'm not sure how to help with that. Start with 'Hi' or type a cost item."}
