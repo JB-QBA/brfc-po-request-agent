@@ -138,6 +138,46 @@ async def chat_webhook(request: Request):
 
     user_state = user_states.get(sender_email)
 
+    if message_text.lower() == "done" and user_state == "awaiting_file":
+        cost_item = user_states.get(f"{sender_email}_cost_item")
+        account = user_states.get(f"{sender_email}_account")
+        department = user_states.get(f"{sender_email}_department")
+        reference = user_states.get(f"{sender_email}_reference")
+
+        summary = (
+            f"📩 *New PO Request Received!*\n"
+            f"*Cost Item:* {cost_item}\n"
+            f"*Account:* {account}\n"
+            f"*Department:* {department}\n"
+            f"*Projects/Events/Budgets:* {reference}\n\n"
+            f"Please make sure that the approved PO is sent to {first_name}."
+        )
+
+        post_to_shared_space(summary)
+        user_states[sender_email] = "awaiting_q1"
+        return {"text": "1️⃣ Does this quote require any upfront payments?"}
+
+    if user_state == "awaiting_q1":
+        user_states[f"{sender_email}_q1"] = message_text
+        user_states[sender_email] = "awaiting_q2"
+        return {"text": "2️⃣ Is this a foreign payment that requires GSA approval?"}
+
+    if user_state == "awaiting_q2":
+        q1 = user_states.get(f"{sender_email}_q1")
+        q2 = message_text
+
+        summary = (
+            f"📋 *Finance Responses Received*\n"
+            f"*From:* {first_name}\n"
+            f"1️⃣ Upfront Payment Required: {q1}\n"
+            f"2️⃣ Foreign Payment / GSA Approval: {q2}"
+        )
+
+        post_to_shared_space(summary)
+        user_states[sender_email] = None
+
+        return {"text": f"Thanks for your time, {first_name}! You're all done."}
+
     if user_state == "awaiting_cost_item":
         department = user_states.get(f"{sender_email}_department")
         account, tracking, reference, item_total = get_account_tracking_reference(message_text, department)
@@ -154,9 +194,9 @@ async def chat_webhook(request: Request):
                     f"📊 Budgeted for item: {int(item_total):,}\n"
                     f"📊 Budgeted total for account '{account}': {int(account_total):,}\n"
                     f"📊 YTD actuals for '{account}': {int(actuals):,}\n\n"
-                    "Please email your quote/document for processing:\n"
+                    "Please email your quote/document for processing to:\n\n"
                     "bahrain-rugby-football-club-po@mail.approvalmax.com\n\n"
-                    "And confirm reply \"done\" once sent for the final couple of Finance questions."
+                    "And once emailed reply \"done\" for the final couple of Finance questions."
                 )
             }
         else:
