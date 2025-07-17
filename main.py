@@ -3,6 +3,9 @@ import json
 import gspread
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
+from email.message import EmailMessage
+import base64
+import os
 
 app = FastAPI()
 user_states = {}
@@ -25,7 +28,9 @@ department_managers = {
     "clubhouse@bahrainrfc.com": "Clubhouse",
     "sports@bahrainrfc.com": "Sports",
     "marketing@bahrainrfc.com": "Marketing",
-    "sponsorship@bahrainrfc.com": "Sponsorship"
+    "sponsorship@bahrainrfc.com": "Sponsorship",
+    "gym@bahrainrfc.com": "Sports",
+    "juniorsport@bahrainrfc.com": "Sports"
 }
 
 all_departments = [
@@ -33,7 +38,7 @@ all_departments = [
     "Human Capital", "Management", "Marketing", "Sponsorship", "Sports"
 ]
 
-greeting_triggers = ["hi", "hello", "hey", "howzit", "salam"]
+greeting_triggers = ["hi", "hello", "hey", "howzit", "salam", "hey cunt", "howdy"]
 
 # GOOGLE AUTH
 def get_gsheet():
